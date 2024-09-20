@@ -1,0 +1,29 @@
+version: '3'
+
+services:
+  db:
+    image: postgres:13
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_DB: myproject_db
+      POSTGRES_USER: myproject_user
+      POSTGRES_PASSWORD: myproject_pass
+    ports:
+      - "5432:5432"
+
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgres://myproject_user:myproject_pass@db:5432/myproject_db
+      - DJANGO_SETTINGS_MODULE=myproject.settings
+
+volumes:
+  postgres_data:

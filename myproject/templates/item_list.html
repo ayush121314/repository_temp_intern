@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Item List</title>
+</head>
+<body>
+    <h1>Item List</h1>
+
+    {% if items %}
+        <table border="1" style="border-collapse: collapse; width: 100%;">
+            <thead>
+                <tr>
+                    <th style="padding: 8px;">Name</th>
+                    <th style="padding: 8px;">Price</th>
+                    <th style="padding: 8px;">Stock</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                    <tr>
+                        <td style="padding: 8px;">{{ item.name }}</td>
+                        <td style="padding: 8px;">${{ item.price }}</td>
+                        <td style="padding: 8px;">{{ item.stock }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No items available.</p>
+    {% endif %}
+</body>
+</html>
