@@ -136,7 +136,8 @@ def create_order(request):
                 request.session['order_data'] = {
                     'items': list(form.cleaned_data['items'].values()),  # Ensure this is serializable
                     'total': float(order.total),  # Convert Decimal to float
-                }
+            }
+
                 request.session['temp_order_id'] = order.id
 
             except Exception as e:
@@ -152,26 +153,27 @@ def create_order(request):
         form = OrderForm()
 
     return render(request, 'create_order.html', {'form': form})
-
+ 
 
 def send_invoice_email(order):
     if order.payment_status != 'success':
         print(f"Order {order.id} has not been paid successfully. Invoice will not be sent.")
         return
-
-    pdf_file = generate_pdf(order)  # Make sure this function is implemented
+    pdf_file = generate_pdf(order)
     subject = f"Your Invoice for Order #{order.id}"
     body = "Please find attached your invoice."
     from_email = os.environ.get('EMAIL_HOST_USER')
     to_email = [order.user.email]
-
-    email = EmailMessage(subject, body, from_email, to_email)
-    email.attach(f'invoice_{order.id}.pdf', pdf_file, 'application/pdf')
     
-    try:
-        email.send()
-    except Exception as e:
-        print(f"Failed to send email: {str(e)}")
+    email = EmailMessage(
+        subject,
+        body,
+        from_email,
+        to_email
+    )
+    
+    email.attach(f'invoice_{order.id}.pdf', pdf_file.read(), 'application/pdf')
+    email.send()
 
 @login_required
 def order_success(request, temp_order_id):
