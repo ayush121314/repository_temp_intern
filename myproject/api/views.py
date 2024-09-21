@@ -115,72 +115,84 @@ class PasswordResetConfirmView(APIView):
             return Response({'detail': 'Password has been reset.'}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-
-
 @login_required
 def create_order(request):
     if request.method == 'POST':
         form = OrderForm(request.POST)
         if form.is_valid():
-            # Create the order but don't commit to save items yet
             order = form.save(commit=False)
             order.user = request.user
-            order.total_price = sum(item.price for item in form.cleaned_data['items'])  # Calculate total price
+            order.total = sum(item.price for item in form.cleaned_data['items'])
             order.save()
-            form.save_m2m()  # Save the many-to-many relationship (items)
+            form.save_m2m()  # Save ManyToMany relationships
 
-            # Create a payment intent
             try:
                 payment_intent = stripe.PaymentIntent.create(
-                    amount=int(order.total_price * 100),  # Amount in cents
-                    currency='usd',  # Adjust currency as needed
+                    amount=int(order.total * 100),  # Amount in cents
+                    currency='usd',
                 )
                 client_secret = payment_intent['client_secret']
-            except Exception as e:
-                return JsonResponse({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+                request.session['payment_intent_id'] = payment_intent.id
+                request.session['order_data'] = {
+                    'items': list(form.cleaned_data['items'].values()),  # Ensure this is serializable
+                    'total': float(order.total),  # Convert Decimal to float
+                }
+                request.session['temp_order_id'] = order.id
 
-            # Render the payment form with the client secret
+            except Exception as e:
+                return JsonResponse({'error': str(e)}, status=400)
+
             return render(request, 'payment_form.html', {
                 'stripe_public_key': settings.STRIPE_TEST_PUBLIC_KEY,
                 'client_secret': client_secret,
-                'order_id': order.id,  # Pass the order ID
+                'order_id': order.id,
             })
+
     else:
         form = OrderForm()
 
     return render(request, 'create_order.html', {'form': form})
 
+
 def send_invoice_email(order):
-    pdf_file = generate_pdf(order)
+    if order.payment_status != 'success':
+        print(f"Order {order.id} has not been paid successfully. Invoice will not be sent.")
+        return
+
+    pdf_file = generate_pdf(order)  # Make sure this function is implemented
     subject = f"Your Invoice for Order #{order.id}"
     body = "Please find attached your invoice."
     from_email = os.environ.get('EMAIL_HOST_USER')
     to_email = [order.user.email]
-    
-    email = EmailMessage(
-        subject,
-        body,
-        from_email,
-        to_email
-    )
-    
-    email.attach(f'invoice_{order.id}.pdf', pdf_file.read(), 'application/pdf')
-    email.send()
 
+    email = EmailMessage(subject, body, from_email, to_email)
+    email.attach(f'invoice_{order.id}.pdf', pdf_file, 'application/pdf')
+    
+    try:
+        email.send()
+    except Exception as e:
+        print(f"Failed to send email: {str(e)}")
 
 @login_required
-def order_success(request, order_id):
-    # Attempt to retrieve the order; if it doesn't exist, a 404 will be raised.
-    order = get_object_or_404(Order, id=order_id)
+def order_success(request, temp_order_id):
+    order_data = request.session.get('order_data')
+    payment_intent_id = request.session.get('payment_intent_id')
 
-    # Check if the order belongs to the authenticated user
-    if order.user != request.user:
-        raise PermissionDenied("You do not have permission to access this order.")
-    
-    # If the order is found and belongs to the user, send the invoice
-    send_invoice_email(order)
-    return JsonResponse({'status': 'success', 'message': 'Invoice sent!'})
+    try:
+        payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
+    if payment_intent['status'] == 'succeeded':
+        order = Order.objects.get(id=temp_order_id)
+        order.payment_status = 'success'
+        order.save()
+
+        send_invoice_email(order)
+
+        return JsonResponse({'status': 'success', 'message': 'Payment successful! You can now download your invoice.'})
+
+    return JsonResponse({'status': 'failed', 'message': 'Payment not completed or failed.'})
 
 
 # @login_required

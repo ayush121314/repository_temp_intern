@@ -14,5 +14,5 @@ urlpatterns = [
     path('create/order/', create_order, name='create_order'),
     path('create/items/', create_item, name='create_item'),
     path('items/',  item_list, name='item_list'), 
-    path('order_success/<int:order_id>/', order_success, name='order_success'),
+    path('order_success/<int:temp_order_id>/', order_success, name='order_success'),
 ]
